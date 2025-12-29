@@ -3,12 +3,19 @@ const Company = require('../models/companyModel');
 const createCompany = async (req, res) => {
   const { name } = req.body;
 
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: 'Company name is required' });
+  }
+
   try {
-    const newCompanyId = await Company.create(name);
-    res.status(201).json({ id: newCompanyId, name });
+    const newCompanyId = await Company.create(name.trim());
+    res.status(201).json({ id: newCompanyId, name: name.trim() });
   } catch (error) {
-    console.error(error.message);
-    res.status(500).send('Server error');
+    console.error('Error creating company:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 };
 
@@ -17,8 +24,11 @@ const getCompanies = async (req, res) => {
     const companies = await Company.findAll();
     res.json(companies);
   } catch (error) {
-    console.error(error.message);
-    res.status(500).send('Server error');
+    console.error('Error fetching companies:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 };
 

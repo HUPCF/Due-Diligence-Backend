@@ -7,14 +7,13 @@ const {
   updateCompany,
   deleteCompany
 } = require('../controllers/companyController');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
-// All these routes will be protected by an auth middleware
-// that will be created later
-
-router.post('/', createCompany);
-router.get('/', getCompanies);
-router.get('/:id', getCompanyById);
-router.put('/:id', updateCompany);
-router.delete('/:id', deleteCompany);
+// All company routes require authentication and admin role
+router.post('/', protect, authorize('admin'), createCompany);
+router.get('/', protect, getCompanies);
+router.get('/:id', protect, getCompanyById);
+router.put('/:id', protect, authorize('admin'), updateCompany);
+router.delete('/:id', protect, authorize('admin'), deleteCompany);
 
 module.exports = router;
