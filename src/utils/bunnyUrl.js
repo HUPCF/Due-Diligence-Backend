@@ -17,32 +17,32 @@ function generateSecureUrl(fileNameOrUrl, expiry = 3600) {
     return '#bunny-config-error';
   }
 
-  let pathForSigning;
+  let decodedPathForSigning;
+  let encodedPathForUrl;
 
   try {
-    // If the input is a full URL, extract its path.
     const parsedUrl = new URL(fileNameOrUrl);
-    pathForSigning = decodeURI(parsedUrl.pathname);
+    decodedPathForSigning = decodeURI(parsedUrl.pathname);
+    encodedPathForUrl = parsedUrl.pathname;
   } catch (e) {
-    // If it's not a URL, it's just a filename. Construct the path.
     const basePath = process.env.BUNNY_BASE_PATH || '';
     const cleanBasePath = basePath.replace(/^\/+|\/+$/g, '');
-    pathForSigning = `/${cleanBasePath}/${fileNameOrUrl}`;
+    decodedPathForSigning = `/${cleanBasePath}/${fileNameOrUrl}`;
+    encodedPathForUrl = `/${cleanBasePath}/${encodeURIComponent(fileNameOrUrl)}`;
   }
 
   // The expires timestamp for the signature
   const expires = Math.floor(Date.now() / 1000) + expiry;
 
-  const stringToSign = securityKey + pathForSigning + expires;
+  const stringToSign = securityKey + decodedPathForSigning + expires;
   const hash = crypto.createHash('sha256').update(stringToSign).digest();
   
   let token = hash.toString('base64');
   token = token.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
-  // The final URL must use a URL-encoded path
-  const finalUrl = `https://${pullZoneUrl}${encodeURI(pathForSigning)}?token=${token}&expires=${expires}`;
+  const finalUrl = `https://${pullZoneUrl}${encodedPathForUrl}?token=${token}&expires=${expires}`;
   
-  console.log(`Path for signing: ${pathForSigning}`);
+  console.log(`Path for signing: ${decodedPathForSigning}`);
   console.log(`Final Secure URL: ${finalUrl}`);
 
   return finalUrl;
