@@ -3,7 +3,8 @@ const nodemailer = require('nodemailer');
 const sendEmail = async (to, subject, text, html = null) => {
   try {
     const smtpHost = process.env.SMTP_HOST || 'relay.enguard.com';
-    const smtpPort = parseInt(process.env.SMTP_PORT) || 25;
+    // Default to port 465 (SSL) for better security and no relay restrictions
+    let smtpPort = parseInt(process.env.SMTP_PORT) || 465;
     const smtpUser = process.env.SMTP_USERNAME || 'hupcfl@enguardsmtp.com';
     const smtpPass = process.env.SMTP_PASSWORD || 'ZHW!bqe2fhz.dce2chg';
     const smtpFromEmail = process.env.SMTP_FROM_EMAIL || 'noreply@hupcfl.com';
@@ -13,35 +14,46 @@ const sendEmail = async (to, subject, text, html = null) => {
     console.log(`Using SMTP host: ${smtpHost}:${smtpPort}`);
     console.log(`Using SMTP user: ${smtpUser}`);
 
-    // For port 25, many SMTP servers don't support authentication (relay servers)
-    // Port 25 typically has strict relay restrictions and doesn't support auth
-    // Ports 587/465 with authentication typically allow relay to any domain
-    const needsAuth = smtpPort !== 25 && smtpUser && smtpPass;
+    // Determine security settings based on port
+    // Port 465: SSL (secure: true)
+    // Port 587: TLS (secure: false, but requiresTLS: true)
+    // Port 25: Can use TLS if enabled (secure: false, but requiresTLS: true)
+    const isSecurePort = smtpPort === 465;
+    const useTLS = smtpPort === 587 || (smtpPort === 25 && process.env.SMTP_TLS === 'true');
     
     const transporterConfig = {
       host: smtpHost,
       port: smtpPort,
-      secure: smtpPort === 465, // true for 465, false for other ports
+      secure: isSecurePort, // true for 465 (SSL), false for others
+      requireTLS: useTLS, // true for 587 and port 25 with TLS
       tls: {
         rejectUnauthorized: false // For self-signed certificates
       }
     };
 
-    // Only add authentication for ports that support it (587, 465, etc.)
-    // Port 25 typically doesn't support authentication
-    if (needsAuth) {
+    // Always use authentication when credentials are available
+    // Port 25 with TLS can use authentication
+    // Ports 587 and 465 require authentication
+    if (smtpUser && smtpPass) {
       transporterConfig.auth = {
         user: smtpUser,
         pass: smtpPass
       };
       console.log('Using SMTP authentication');
-    } else if (smtpPort === 25) {
-      console.log('Port 25 detected - using relay mode (no authentication)');
-      console.warn('WARNING: Port 25 without authentication has relay restrictions.');
-      console.warn('The SMTP server may block recipient domains that are not whitelisted.');
-      console.warn('To send to any domain, use port 587 or 465 with authentication.');
+      
+      if (smtpPort === 465) {
+        console.log('Port 465 (SSL) with authentication - allows sending to any domain');
+      } else if (smtpPort === 587) {
+        console.log('Port 587 (TLS) with authentication - allows sending to any domain');
+      } else if (smtpPort === 25 && useTLS) {
+        console.log('Port 25 (TLS) with authentication - allows sending to any domain');
+      } else if (smtpPort === 25) {
+        console.warn('⚠️  Port 25 without TLS has relay restrictions.');
+        console.warn('The SMTP server may block recipient domains that are not whitelisted.');
+        console.warn('Recommendation: Use port 465 (SSL) or 587 (TLS) with authentication.');
+      }
     } else {
-      console.log('No authentication configured');
+      console.warn('⚠️  No SMTP credentials configured. Authentication may fail.');
     }
 
     const transporter = nodemailer.createTransport(transporterConfig);
@@ -58,32 +70,29 @@ const sendEmail = async (to, subject, text, html = null) => {
       // Don't throw - some SMTP servers don't support verify() but can still send emails
     }
 
-    // Ensure the "from" email matches the SMTP user domain to avoid relay restrictions
-    // For port 25 (relay servers), the "from" address MUST match the authorized domain
-    // Always use SMTP user email for port 25 to ensure it matches the authorized domain
+    // Determine the "from" email address
+    // For authenticated SMTP (ports 465, 587, or 25 with TLS), we can use any from address
+    // But it's good practice to use an address from the same domain as the SMTP user
     let fromEmail = smtpFromEmail;
     
-    if (smtpPort === 25 && smtpUser && smtpUser.includes('@')) {
-      // For port 25, always use SMTP user email to avoid relay restrictions
-      console.log(`Port 25 detected - using SMTP user email (${smtpUser}) as from address to avoid relay restrictions`);
-      fromEmail = smtpUser;
-    } else if (smtpUser && smtpUser.includes('@')) {
-      // For other ports, check if domains match
+    if (smtpUser && smtpUser.includes('@')) {
       const smtpDomain = smtpUser.split('@')[1];
       const fromDomain = smtpFromEmail.includes('@') ? smtpFromEmail.split('@')[1] : '';
       
-      // If domains don't match, use SMTP user email as from address
-      if (fromDomain !== smtpDomain) {
-        console.warn(`From email domain (${fromDomain}) doesn't match SMTP user domain (${smtpDomain}). Using SMTP user email (${smtpUser}) as from address to avoid relay restrictions.`);
+      // If domains don't match, optionally use SMTP user email as from address
+      // This is optional for authenticated SMTP but can help with deliverability
+      if (fromDomain !== smtpDomain && smtpPort === 25 && !useTLS) {
+        // Only for port 25 without TLS (relay mode)
+        console.log(`Using SMTP user email (${smtpUser}) as from address for port 25 relay mode`);
         fromEmail = smtpUser;
-      } else {
+      } else if (fromDomain === smtpDomain) {
         console.log(`From email domain (${fromDomain}) matches SMTP user domain - using ${smtpFromEmail}`);
+      } else {
+        console.log(`Using configured from email: ${smtpFromEmail} (authenticated SMTP allows this)`);
       }
     }
 
-    // For port 25, ensure we're using the SMTP user email to avoid relay restrictions
-    // Some SMTP servers check both envelope sender and From header
-    const finalFromEmail = (smtpPort === 25 && smtpUser) ? smtpUser : fromEmail;
+    const finalFromEmail = fromEmail;
     
     const mailOptions = {
       from: `"${smtpFromName}" <${finalFromEmail}>`,
@@ -117,24 +126,40 @@ const sendEmail = async (to, subject, text, html = null) => {
     
     // Provide more helpful error messages
     let errorMessage = error.message;
+    const currentPort = parseInt(process.env.SMTP_PORT) || 465;
+    const currentUseTLS = currentPort === 587 || (currentPort === 25 && process.env.SMTP_TLS === 'true');
+    const currentSmtpUser = process.env.SMTP_USERNAME || 'hupcfl@enguardsmtp.com';
+    const currentSmtpPass = process.env.SMTP_PASSWORD;
+    const currentSmtpHost = process.env.SMTP_HOST || 'relay.enguard.com';
+    
     if (error.code === 'EAUTH' || error.responseCode === 535 || error.message.includes('Authentication failed')) {
-      if (smtpPort === 25) {
-        errorMessage = 'SMTP authentication failed on port 25. Port 25 typically does not support authentication. Please use port 587 (TLS) or 465 (SSL) with authentication to send emails to any domain. Update your .env file: SMTP_PORT=587 or SMTP_PORT=465';
-      } else {
-        errorMessage = 'SMTP authentication failed. Please check your SMTP_USERNAME and SMTP_PASSWORD in your .env file.';
+      errorMessage = 'SMTP authentication failed. Please check your SMTP_USERNAME and SMTP_PASSWORD in your .env file.';
+      if (currentPort === 25 && !currentUseTLS) {
+        errorMessage += ' Note: Port 25 without TLS may not support authentication. Try port 465 (SSL) or 587 (TLS).';
       }
     } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
-      errorMessage = `Cannot connect to SMTP server at ${process.env.SMTP_HOST || 'relay.enguard.com'}:${process.env.SMTP_PORT || 25}. Please check your SMTP host and port settings.`;
+      errorMessage = `Cannot connect to SMTP server at ${currentSmtpHost}:${currentPort}. Please check your SMTP host and port settings.`;
+      if (currentPort === 465) {
+        errorMessage += ' Make sure SSL is enabled for port 465.';
+      } else if (currentPort === 587) {
+        errorMessage += ' Make sure TLS is enabled for port 587.';
+      }
     } else if (error.responseCode === 550 || error.message.includes('Relay is not allowed') || error.message.includes('relay')) {
       // Check if it's a recipient rejection (RCPT TO command)
       const isRecipientRejection = error.command === 'RCPT TO' || (error.rejected && error.rejected.length > 0);
       
       if (isRecipientRejection) {
         const rejectedRecipients = error.rejected ? error.rejected.join(', ') : 'the recipient';
-        errorMessage = `SMTP relay error (550): The SMTP server is blocking the recipient email address (${rejectedRecipients}). The recipient's domain is not authorized for relay on this SMTP server. Please contact your SMTP administrator to allow relay for the recipient's domain, or use a different SMTP server that allows sending to this domain.`;
+        
+        if (currentPort === 25 && !currentUseTLS && currentSmtpUser && currentSmtpPass) {
+          errorMessage = `SMTP relay error (550): Port 25 without TLS has relay restrictions and is blocking the recipient domain.\n\nSOLUTION: Switch to authenticated SMTP by updating your .env file:\n\nSMTP_PORT=465\n\nPort 465 (SSL) with authentication allows sending to any domain. Your credentials are already configured, just change the port.`;
+        } else if (currentPort === 25 && !currentUseTLS) {
+          errorMessage = `SMTP relay error (550): Port 25 without TLS/authentication has relay restrictions.\n\nSOLUTION: Use port 465 (SSL) or 587 (TLS) with authentication. Update your .env: SMTP_PORT=465`;
+        } else {
+          errorMessage = `SMTP relay error (550): The SMTP server is blocking the recipient email address (${rejectedRecipients}).\n\nThis is unusual for authenticated SMTP (ports 465/587). Please:\n1. Verify your SMTP credentials are correct\n2. Contact your SMTP administrator\n3. Check if the recipient domain is blocked`;
+        }
       } else {
-        const smtpUserForError = process.env.SMTP_USERNAME || 'hupcfl@enguardsmtp.com';
-        errorMessage = `SMTP relay error (550): The "from" email address domain must match your SMTP server's authorized domain. Please set SMTP_FROM_EMAIL to an email address from the same domain as your SMTP_USERNAME (${smtpUserForError}), or configure your SMTP server to allow relay for your domain.`;
+        errorMessage = `SMTP relay error (550): The "from" email address domain must match your SMTP server's authorized domain. Please set SMTP_FROM_EMAIL to an email address from the same domain as your SMTP_USERNAME (${currentSmtpUser}), or configure your SMTP server to allow relay for your domain.`;
       }
     } else if (error.responseCode) {
       errorMessage = `SMTP server error (${error.responseCode}): ${error.response || error.message}`;
