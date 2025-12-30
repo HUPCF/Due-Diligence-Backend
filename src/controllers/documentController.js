@@ -1,10 +1,9 @@
 const Document = require('../models/documentModel');
 const multer = require('multer');
-const { uploadFileToBunny, deleteFileFromBunny } = require('../services/bunnyService');
+const { uploadFileToBunny, deleteFileFromBunny, downloadFileFromBunny } = require('../services/bunnyService');
 const { generateSecureUrl } = require('../utils/bunnyUrl');
 const User = require('../models/userModel'); // Import User model
 const path = require('path');
-const axios = require('axios');
 
 // Configure Multer for file uploads in memory
 const upload = multer({ storage: multer.memoryStorage() });
@@ -161,37 +160,65 @@ const downloadFile = async (req, res) => {
       filePath = fileName;
     }
 
-    // Generate secure URL for the file
-    const secureUrl = generateSecureUrl(filePath, 3600); // 1 hour expiry
-    
-    if (secureUrl === '#bunny-config-error') {
-      return res.status(500).json({ message: 'Bunny.net configuration error.' });
+    // Remove base path if it's already included (to avoid double-adding)
+    const basePath = process.env.BUNNY_BASE_PATH || '';
+    const cleanBasePath = basePath.replace(/^\/+|\/+$/g, '');
+    if (cleanBasePath && filePath.startsWith(cleanBasePath + '/')) {
+      filePath = filePath.substring(cleanBasePath.length + 1);
     }
 
-    console.log(`Downloading file: ${filePath} from ${secureUrl}`);
+    console.log(`Processing download - fileName: ${fileName}, filePath: ${filePath}, basePath: ${cleanBasePath}`);
 
-    // Fetch the file from Bunny.net
-    const response = await axios.get(secureUrl, {
-      responseType: 'stream',
-      timeout: 60000, // 60 second timeout
-    });
+    // Use Storage API to download file directly (more reliable than Pull Zone for server-side)
+    console.log(`Downloading file: ${filePath} from Bunny.net Storage API`);
+
+    // Download file stream from Bunny.net Storage API
+    const fileStream = await downloadFileFromBunny(filePath);
 
     // Extract original filename from the stored filename (remove timestamp prefix if present)
     const originalFileName = filePath.includes('_') ? filePath.substring(filePath.indexOf('_') + 1) : filePath;
 
     // Set headers for file download
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalFileName)}"`);
-    res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
+    res.setHeader('Content-Type', 'application/octet-stream'); // Generic binary type
     
     // Stream the file to the client
-    response.data.pipe(res);
+    fileStream.pipe(res);
 
   } catch (error) {
     console.error('Error downloading file:', error.message);
+    console.error('Error stack:', error.stack);
     if (error.response) {
       console.error('Response status:', error.response.status);
-      console.error('Response data:', error.response.data);
+      console.error('Response headers:', error.response.headers);
+      
+      // If it's a 403 or 404, the file might not exist
+      if (error.response.status === 403 || error.response.status === 404) {
+        let errorBody = 'Unable to read error body';
+        try {
+          if (error.response.data && typeof error.response.data === 'string') {
+            errorBody = error.response.data.substring(0, 500);
+          } else if (error.response.data) {
+            errorBody = JSON.stringify(error.response.data).substring(0, 500);
+          }
+        } catch (e) {
+          console.error('Could not read error response body');
+        }
+        console.error(`${error.response.status} response body:`, errorBody);
+        return res.status(error.response.status).json({ 
+          message: `File not found or access denied. The file may not exist in Bunny.net Storage.`, 
+          error: `Bunny.net Storage API returned ${error.response.status}`,
+          details: errorBody
+        });
+      }
+      
+      return res.status(error.response.status).json({ 
+        message: 'Failed to download file from Bunny.net.', 
+        error: error.message,
+        status: error.response.status
+      });
     }
+    
     res.status(500).json({ 
       message: 'Failed to download file.', 
       error: error.message 

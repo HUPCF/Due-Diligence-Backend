@@ -134,7 +134,83 @@ const deleteFileFromBunny = async (fileName) => {
   }
 };
 
+// Download a file from Bunny.net Storage API (for server-side downloads)
+// Similar to PHP's download_legal_file_from_bunny function
+const downloadFileFromBunny = async (fileName) => {
+  try {
+    const storageZoneName = process.env.BUNNY_STORAGE_ZONE_NAME;
+    const apiKey = process.env.BUNNY_API_KEY;
+    const storageRegion = process.env.BUNNY_STORAGE_REGION || 'ny';
+    const basePath = process.env.BUNNY_BASE_PATH;
+
+    if (!storageZoneName || !apiKey) {
+      throw new Error('Bunny.net credentials not configured for download.');
+    }
+
+    const regionMap = {
+      'ny': 'ny.storage.bunnycdn.com',
+      'la': 'la.storage.bunnycdn.com',
+      'sg': 'sg.storage.bunnycdn.com',
+      'de': 'de.storage.bunnycdn.com',
+      'jh': 'jh.storage.bunnycdn.com'
+    };
+    
+    const storageHost = regionMap[storageRegion] || 'ny.storage.bunnycdn.com';
+    
+    // Clean base path - remove leading/trailing slashes
+    const cleanBasePath = basePath ? basePath.replace(/^\/+|\/+$/g, '') : '';
+    // Construct the full path on Bunny.net (same as upload)
+    const bunnyPath = cleanBasePath ? `${cleanBasePath}/${fileName}` : fileName;
+    
+    // Bunny.net Storage API URL format: https://{region}.storage.bunnycdn.com/{storageZoneName}/{path}
+    // Path must be URL-encoded
+    const downloadUrl = `https://${storageHost}/${storageZoneName}/${encodeURI(bunnyPath)}`;
+
+    console.log(`=== Bunny.net Download Details ===`);
+    console.log(`Storage Zone: ${storageZoneName}`);
+    console.log(`Region: ${storageRegion} (${storageHost})`);
+    console.log(`File Path: ${bunnyPath}`);
+    console.log(`Download URL: ${downloadUrl}`);
+
+    // Download using Storage API with AccessKey header (like PHP's BunnyClient)
+    const response = await axios.get(downloadUrl, {
+      responseType: 'stream',
+      headers: {
+        'AccessKey': apiKey  // Storage API authentication
+      },
+      timeout: 60000, // 60 second timeout
+      validateStatus: (status) => status >= 200 && status < 300, // Only accept 2xx
+    });
+
+    console.log(`✅ File ${fileName} downloaded from Bunny.net Storage API successfully!`);
+    console.log(`Response status: ${response.status}`);
+    return response.data; // Return the stream
+
+  } catch (error) {
+    console.error('❌ Error downloading file from Bunny.net Storage API:', error.message);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+      if (error.response.data) {
+        // Try to read error response body
+        try {
+          const errorData = error.response.data;
+          if (typeof errorData === 'string') {
+            console.error('Error response body:', errorData.substring(0, 500));
+          } else {
+            console.error('Error response data:', JSON.stringify(errorData).substring(0, 500));
+          }
+        } catch (e) {
+          console.error('Could not read error response body');
+        }
+      }
+    }
+    throw error;
+  }
+};
+
 module.exports = {
   uploadFileToBunny,
   deleteFileFromBunny,
+  downloadFileFromBunny,
 };
