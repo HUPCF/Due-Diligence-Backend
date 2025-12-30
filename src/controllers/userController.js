@@ -243,6 +243,27 @@ const deleteUser = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+    
+    // Check if user has any data (responses or documents)
+    const db = require('../config/db');
+    const [responseRows] = await db.execute(
+      'SELECT COUNT(*) as count FROM user_responses WHERE user_id = ?',
+      [id]
+    );
+    const [documentRows] = await db.execute(
+      'SELECT COUNT(*) as count FROM documents WHERE user_id = ?',
+      [id]
+    );
+    
+    const hasResponses = responseRows[0].count > 0;
+    const hasDocuments = documentRows[0].count > 0;
+    
+    if (hasResponses || hasDocuments) {
+      return res.status(400).json({ 
+        message: 'Cannot delete user. User has checklist responses or documents. Please remove all data before deleting.' 
+      });
+    }
+    
     await User.delete(id);
     res.status(200).json({ message: 'User deleted successfully.' });
   } catch (error) {

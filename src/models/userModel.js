@@ -34,7 +34,13 @@ const User = {
          u.email, 
          u.role, 
          u.company_id,
-         c.name AS company_name
+         c.name AS company_name,
+         CASE 
+           WHEN EXISTS (SELECT 1 FROM user_responses WHERE user_id = u.id) 
+           OR EXISTS (SELECT 1 FROM documents WHERE user_id = u.id)
+           THEN 1 
+           ELSE 0 
+         END AS has_data
        FROM users u
        LEFT JOIN companies c ON u.company_id = c.id`
     );
