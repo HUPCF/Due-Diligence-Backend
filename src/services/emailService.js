@@ -26,9 +26,9 @@ const sendEmail = async (to, subject, text, html = null) => {
       port: smtpPort,
       secure: isSecurePort, // true for 465 (SSL), false for others
       requireTLS: useTLS, // true for 587 and port 25 with TLS
-      connectionTimeout: 10000, // 10 seconds
-      greetingTimeout: 10000, // 10 seconds
-      socketTimeout: 10000, // 10 seconds
+      connectionTimeout: 20000, // 20 seconds - increased for port 465
+      greetingTimeout: 20000, // 20 seconds
+      socketTimeout: 20000, // 20 seconds
       tls: {
         rejectUnauthorized: false, // For self-signed certificates
         ...(isSecurePort && {
@@ -65,15 +65,17 @@ const sendEmail = async (to, subject, text, html = null) => {
     const transporter = nodemailer.createTransport(transporterConfig);
 
     // Verify connection (optional - some SMTP servers don't support verification)
+    // Skip verification if it times out - we'll try to send anyway
     try {
       await Promise.race([
         transporter.verify(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Verification timeout')), 5000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Verification timeout')), 3000))
       ]);
       console.log('SMTP connection verified successfully');
     } catch (verifyError) {
       console.warn('SMTP verification failed or timed out, but continuing anyway:', verifyError.message);
       // Don't throw - some SMTP servers don't support verify() but can still send emails
+      // The actual sendMail() call will handle connection errors
     }
 
     // Determine the "from" email address
@@ -117,9 +119,31 @@ const sendEmail = async (to, subject, text, html = null) => {
     console.log(`===========================`);
 
     console.log(`Sending email with subject: ${subject}`);
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Email sent successfully to ${to}. Message ID: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+    
+    // Send email with retry logic for connection timeouts
+    let lastError;
+    const maxRetries = 2;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`Email sent successfully to ${to}. Message ID: ${info.messageId}`);
+        return { success: true, messageId: info.messageId };
+      } catch (sendError) {
+        lastError = sendError;
+        // If it's a connection timeout and we have retries left, try again with a fresh connection
+        if ((sendError.code === 'ETIMEDOUT' || sendError.code === 'ECONNECTION' || sendError.code === 'ESOCKET') && attempt < maxRetries) {
+          console.warn(`Email send attempt ${attempt} failed (${sendError.code}), retrying with fresh connection...`, sendError.message);
+          // Wait a bit before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          // Create a new transporter for retry (fresh connection)
+          transporter = nodemailer.createTransport(transporterConfig);
+          continue;
+        }
+        throw sendError;
+      }
+    }
+    
+    throw lastError;
   } catch (error) {
     console.error('Error sending email:', error);
     console.error('Error details:', {
