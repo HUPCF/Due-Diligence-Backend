@@ -2,27 +2,77 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-// CORS Configuration
+// CORS Configuration - Allow all origins for production
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Allow all origins in production (you can restrict this to specific domains)
-    callback(null, true);
+    // Allow all origins - you can restrict this to specific domains if needed
+    // For production, allow requests from the frontend domain
+    const allowedOrigins = [
+      'https://dd.cp.hupcfl.com',
+      'http://localhost:3000',
+      'http://localhost:5173'
+    ];
+    
+    // Allow if origin is in allowed list or if it's a development environment
+    if (allowedOrigins.includes(origin) || !origin || process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+    } else {
+      // In production, still allow but log it
+      console.log('CORS: Allowing origin:', origin);
+      callback(null, true);
+    }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   exposedHeaders: ['Authorization'],
-  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 };
 
-// Middleware
+// Apply CORS middleware before all other middleware
 app.use(cors(corsOptions));
 
-// Handle preflight requests explicitly
-app.options('*', cors(corsOptions));
+// Manual CORS headers as fallback (in case cors middleware fails)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://dd.cp.hupcfl.com',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ];
+  
+  // Set CORS headers
+  if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production')) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400'); // 24 hours
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
+
+// Explicitly handle OPTIONS requests for all routes
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
