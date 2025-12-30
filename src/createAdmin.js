@@ -5,15 +5,28 @@ const mysql = require('mysql2/promise');
 const createAdmin = async () => {
     let connection;
   try {
-    connection = await mysql.createConnection({
+    // Use the same database configuration as the main app
+    const dbConfig = {
         host: process.env.DB_HOST || 'localhost',
         user: process.env.DB_USER || 'root',
         password: process.env.DB_PASSWORD || '',
         database: process.env.DB_NAME || 'due_diligence',
-    });
+    };
 
-    const email = 'admin@example.com';
-    const password = 'password';
+    // Add port if specified
+    if (process.env.DB_PORT) {
+        dbConfig.port = parseInt(process.env.DB_PORT);
+    }
+
+    // Add SSL configuration for Vultr or if DB_SSL is true
+    if (process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST.includes('vultr'))) {
+        dbConfig.ssl = { rejectUnauthorized: false };
+    }
+
+    connection = await mysql.createConnection(dbConfig);
+
+    const email = 'admin@hupcfl.com';
+    const password = 'Harmony@2026';
     const role = 'admin';
 
     // Check if admin already exists
