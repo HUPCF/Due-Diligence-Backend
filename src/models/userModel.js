@@ -44,6 +44,10 @@ const User = {
     await db.execute('UPDATE users SET password = ? WHERE id = ?', [password, id]);
     return true;
   },
+  delete: async (id) => {
+    await db.execute('DELETE FROM users WHERE id = ?', [id]);
+    return true;
+  },
 };
 
 module.exports = User;

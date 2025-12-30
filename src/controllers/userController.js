@@ -183,10 +183,26 @@ const getUserById = async (req, res) => {
   }
 };
 
+const deleteUser = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    await User.delete(id);
+    res.status(200).json({ message: 'User deleted successfully.' });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Server error');
+  }
+};
+
 module.exports = {
   createUser,
   getAllUsers,
   resetPassword,
   getUserById,
   sendCredentialsEmail,
+  deleteUser,
 };
