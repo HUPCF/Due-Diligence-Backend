@@ -49,10 +49,19 @@ const createUser = async (req, res) => {
     `;
     
     try {
+      console.log(`Attempting to send account creation email to: ${email}`);
       await sendEmail(email, subject, text, html);
+      console.log(`Account creation email sent successfully to ${email}`);
     } catch (emailError) {
-      console.error('Failed to send account creation email:', emailError.message);
+      console.error('Failed to send account creation email:', emailError);
+      console.error('Email error details:', {
+        message: emailError.message,
+        stack: emailError.stack,
+        code: emailError.code,
+        responseCode: emailError.responseCode
+      });
       // Do not fail user creation just because email failed
+      // But log the error for debugging
     }
 
     res
@@ -165,11 +174,21 @@ const sendCredentialsEmail = async (req, res) => {
       console.error('Email error details:', {
         message: emailError.message,
         stack: emailError.stack,
-        code: emailError.code
+        code: emailError.code,
+        responseCode: emailError.responseCode
       });
+      
+      // Provide more detailed error message
+      let errorMessage = emailError.message || 'Unknown email error';
+      if (emailError.code === 'ECONNECTION' || emailError.code === 'ETIMEDOUT' || emailError.code === 'ESOCKET') {
+        errorMessage = `Cannot connect to SMTP server. Please check your SMTP configuration. ${emailError.message}`;
+      } else if (emailError.responseCode === 550) {
+        errorMessage = `SMTP relay error: ${emailError.message}`;
+      }
+      
       res.status(500).json({ 
         message: 'Failed to send email.', 
-        error: emailError.message || 'Unknown email error'
+        error: errorMessage
       });
     }
   } catch (error) {
