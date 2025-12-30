@@ -123,11 +123,18 @@ const sendCredentialsEmail = async (req, res) => {
 
   try {
     console.log(`Sending credentials email for user ID: ${id}`);
+    console.log(`Password received: ${password ? '***' + password.substring(password.length - 2) : 'MISSING'}`);
+    console.log(`Password length: ${password ? password.length : 0}`);
     
     // Validate password
     if (!password) {
       console.error('Password validation failed: password is missing');
       return res.status(400).json({ message: 'Password is required to send credentials email.' });
+    }
+    
+    if (typeof password !== 'string' || password.trim().length === 0) {
+      console.error('Password validation failed: password is empty or not a string');
+      return res.status(400).json({ message: 'Password must be a non-empty string.' });
     }
 
     // Find user
@@ -143,12 +150,20 @@ const sendCredentialsEmail = async (req, res) => {
     }
 
     console.log(`Preparing to send credentials email to: ${user.email}`);
+    console.log(`Password value check - Type: ${typeof password}, Length: ${password ? password.length : 0}, Value: ${password ? '***' + password.substring(Math.max(0, password.length - 2)) : 'UNDEFINED'}`);
 
     // Get login URL from environment or use default
     const loginUrl = process.env.LOGIN_URL || 'https://dd.cp.hupcfl.com/';
     
+    // Ensure password is a string and not empty
+    const passwordToSend = password && typeof password === 'string' ? password : '';
+    if (!passwordToSend) {
+      console.error('Password is empty or invalid, cannot send email');
+      return res.status(400).json({ message: 'Password is required and must be a valid string.' });
+    }
+    
     const subject = 'Your Account Credentials';
-    const text = `Hello,\n\nYour account credentials are:\n\nEmail: ${user.email}\nPassword: ${password}\n\nLogin URL: ${loginUrl}\n\nIf you did not request this information, please contact your administrator immediately.\n\nThank you.`;
+    const text = `Hello,\n\nYour account credentials are:\n\nEmail: ${user.email}\nPassword: ${passwordToSend}\n\nLogin URL: ${loginUrl}\n\nIf you did not request this information, please contact your administrator immediately.\n\nThank you.`;
     
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -157,18 +172,21 @@ const sendCredentialsEmail = async (req, res) => {
         <p>Your account credentials are:</p>
         <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
           <p style="margin: 5px 0;"><strong>Email:</strong> ${user.email}</p>
-          <p style="margin: 5px 0;"><strong>Password:</strong> ${password}</p>
+          <p style="margin: 5px 0;"><strong>Password:</strong> ${passwordToSend}</p>
         </div>
         <p><a href="${loginUrl}" style="background-color: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Login Here</a></p>
         <p style="color: #EF4444; font-size: 12px;">If you did not request this information, please contact your administrator immediately.</p>
         <p>Thank you.</p>
       </div>
     `;
+    
+    console.log(`Email content prepared - Password in text: ${text.includes(passwordToSend)}, Password in HTML: ${html.includes(passwordToSend)}`);
 
     try {
+      console.log(`Sending email to ${user.email} with password: ${password ? '***' + password.substring(password.length - 2) : 'MISSING'}`);
       await sendEmail(user.email, subject, text, html);
       console.log(`Credentials email sent successfully to ${user.email}`);
-      res.status(200).json({ message: 'Credentials email sent successfully.' });
+      return res.status(200).json({ message: 'Credentials email sent successfully.' });
     } catch (emailError) {
       console.error('Failed to send credentials email:', emailError);
       console.error('Email error details:', {
