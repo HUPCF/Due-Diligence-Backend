@@ -39,6 +39,22 @@ app.get('/', (req, res) => {
   res.send('Hello from the backend!');
 });
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Test endpoint to verify routing works (accepts all methods)
+app.all('/api/test', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    timestamp: new Date().toISOString() 
+  });
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/companies', require('./routes/companyRoutes'));
@@ -47,8 +63,8 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/documents', require('./routes/documentRoutes')); // New document routes
 app.use('/api/checklist', require('./routes/checklistRoutes'));
 
-// Catch-all route for unmatched API requests
-app.use('/api/*', (req, res) => {
+// Catch-all route for unmatched API requests (must be last)
+app.use('/api', (req, res) => {
   console.error(`Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ 
     message: 'Route not found', 

@@ -3,6 +3,12 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 
 const login = async (req, res) => {
+  console.log('=== LOGIN REQUEST RECEIVED ===');
+  console.log('Method:', req.method);
+  console.log('Path:', req.path);
+  console.log('Original URL:', req.originalUrl);
+  console.log('Body:', { email: req.body?.email, password: req.body?.password ? '***' : undefined });
+  
   const { email, password } = req.body;
 
   try {
