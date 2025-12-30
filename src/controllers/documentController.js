@@ -4,6 +4,7 @@ const { uploadFileToBunny, deleteFileFromBunny } = require('../services/bunnySer
 const { generateSecureUrl } = require('../utils/bunnyUrl');
 const User = require('../models/userModel'); // Import User model
 const path = require('path');
+const axios = require('axios');
 
 // Configure Multer for file uploads in memory
 const upload = multer({ storage: multer.memoryStorage() });
@@ -75,13 +76,13 @@ const getDocumentsByUserId = async (req, res) => {
 
     const documents = await Document.findByCompanyId(companyIdToView);
     
-    // For each document, generate a secure, expiring URL for the frontend
+    // For each document, keep the stored filename and add a secure URL
     const documentsWithSecureUrls = documents.map(doc => {
       if (doc.file_path) {
         return {
           ...doc,
-          // Replace file_path with a secure URL
-          file_path: generateSecureUrl(doc.file_path)
+          storedFileName: doc.file_path, // Keep the stored filename for download endpoint
+          file_path: generateSecureUrl(doc.file_path) // Keep secure URL for backward compatibility
         };
       }
       return doc;
@@ -137,9 +138,71 @@ const deleteDocument = async (req, res) => {
 };
 
 
+// Controller to download a file from Bunny.net
+const downloadFile = async (req, res) => {
+  try {
+    let { fileName } = req.params;
+    
+    if (!fileName) {
+      return res.status(400).json({ message: 'File name is required.' });
+    }
+
+    // Decode the filename
+    fileName = decodeURIComponent(fileName);
+
+    // If it's a full URL, extract just the filename/path
+    let filePath = fileName;
+    try {
+      const url = new URL(fileName);
+      // Extract pathname and remove leading slash
+      filePath = url.pathname.substring(1);
+    } catch (e) {
+      // Not a URL, use as-is
+      filePath = fileName;
+    }
+
+    // Generate secure URL for the file
+    const secureUrl = generateSecureUrl(filePath, 3600); // 1 hour expiry
+    
+    if (secureUrl === '#bunny-config-error') {
+      return res.status(500).json({ message: 'Bunny.net configuration error.' });
+    }
+
+    console.log(`Downloading file: ${filePath} from ${secureUrl}`);
+
+    // Fetch the file from Bunny.net
+    const response = await axios.get(secureUrl, {
+      responseType: 'stream',
+      timeout: 60000, // 60 second timeout
+    });
+
+    // Extract original filename from the stored filename (remove timestamp prefix if present)
+    const originalFileName = filePath.includes('_') ? filePath.substring(filePath.indexOf('_') + 1) : filePath;
+
+    // Set headers for file download
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalFileName)}"`);
+    res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
+    
+    // Stream the file to the client
+    response.data.pipe(res);
+
+  } catch (error) {
+    console.error('Error downloading file:', error.message);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    res.status(500).json({ 
+      message: 'Failed to download file.', 
+      error: error.message 
+    });
+  }
+};
+
 module.exports = {
   upload, // Multer middleware
   uploadDocument,
   getDocumentsByUserId,
-  deleteDocument
+  deleteDocument,
+  downloadFile
 };
