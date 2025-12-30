@@ -30,10 +30,26 @@ const createUser = async (req, res) => {
     const newUserId = await User.create(email, hashedPassword, role, companyId);
 
     // Optional: notify user that an account has been created (without including the password)
+    const loginUrl = process.env.LOGIN_URL || 'https://dd.cp.hupcfl.com/';
     const subject = 'Your New Account';
-    const text = `Hello,\n\nAn account has been created for you.\n\nLogin URL: [Your Login Page URL]\nEmail: ${email}\n\nIf you did not expect this account, please contact your administrator.\n\nThank you.`;
+    const text = `Hello,\n\nAn account has been created for you.\n\nLogin URL: ${loginUrl}\nEmail: ${email}\n\nIf you did not expect this account, please contact your administrator.\n\nThank you.`;
+    
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #4F46E5;">Your New Account</h2>
+        <p>Hello,</p>
+        <p>An account has been created for you.</p>
+        <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
+          <p style="margin: 5px 0;"><strong>Email:</strong> ${email}</p>
+        </div>
+        <p><a href="${loginUrl}" style="background-color: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Login Here</a></p>
+        <p style="color: #EF4444; font-size: 12px;">If you did not expect this account, please contact your administrator.</p>
+        <p>Thank you.</p>
+      </div>
+    `;
+    
     try {
-      await sendEmail(email, subject, text);
+      await sendEmail(email, subject, text, html);
     } catch (emailError) {
       console.error('Failed to send account creation email:', emailError.message);
       // Do not fail user creation just because email failed

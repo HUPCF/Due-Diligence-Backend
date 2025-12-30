@@ -26,8 +26,14 @@ const sendEmail = async (to, subject, text, html = null) => {
       port: smtpPort,
       secure: isSecurePort, // true for 465 (SSL), false for others
       requireTLS: useTLS, // true for 587 and port 25 with TLS
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000, // 10 seconds
+      socketTimeout: 10000, // 10 seconds
       tls: {
-        rejectUnauthorized: false // For self-signed certificates
+        rejectUnauthorized: false, // For self-signed certificates
+        ...(isSecurePort && {
+          minVersion: 'TLSv1.2' // For SSL connections
+        })
       }
     };
 
@@ -137,12 +143,14 @@ const sendEmail = async (to, subject, text, html = null) => {
       if (currentPort === 25 && !currentUseTLS) {
         errorMessage += ' Note: Port 25 without TLS may not support authentication. Try port 465 (SSL) or 587 (TLS).';
       }
-    } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
-      errorMessage = `Cannot connect to SMTP server at ${currentSmtpHost}:${currentPort}. Please check your SMTP host and port settings.`;
+    } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT' || error.code === 'ESOCKET') {
+      errorMessage = `Cannot connect to SMTP server at ${currentSmtpHost}:${currentPort}. `;
       if (currentPort === 465) {
-        errorMessage += ' Make sure SSL is enabled for port 465.';
+        errorMessage += `Port 465 (SSL) connection failed. This could mean:\n1. Port 465 is blocked by firewall\n2. The SMTP server doesn't support SSL on port 465\n3. Network connectivity issues\n\nSOLUTION: Try port 587 (TLS) instead by setting SMTP_PORT=587 in your .env file.`;
       } else if (currentPort === 587) {
-        errorMessage += ' Make sure TLS is enabled for port 587.';
+        errorMessage += `Port 587 (TLS) connection failed. Please check:\n1. Firewall allows outbound connections on port 587\n2. SMTP server is accessible\n3. Network connectivity`;
+      } else {
+        errorMessage += `Please check your SMTP host and port settings.`;
       }
     } else if (error.responseCode === 550 || error.message.includes('Relay is not allowed') || error.message.includes('relay')) {
       // Check if it's a recipient rejection (RCPT TO command)
