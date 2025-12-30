@@ -120,10 +120,10 @@ const sendCredentialsEmail = async (req, res) => {
     console.log(`Preparing to send credentials email to: ${user.email}`);
 
     // Get login URL from environment or use default
-    const loginUrl = process.env.LOGIN_URL || 'http://localhost:3000/login';
+    const loginUrl = process.env.LOGIN_URL || 'https://dd.cp.hupcfl.com/';
     
     const subject = 'Your Account Credentials';
-    const text = `Hello,\n\nYour account credentials are:\n\nEmail: ${user.email}\nPassword: ${password}\n\nLogin URL: ${loginUrl}\n\nPlease keep this information secure and change your password after logging in.\n\nIf you did not request this information, please contact your administrator immediately.\n\nThank you.`;
+    const text = `Hello,\n\nYour account credentials are:\n\nEmail: ${user.email}\nPassword: ${password}\n\nLogin URL: ${loginUrl}\n\nIf you did not request this information, please contact your administrator immediately.\n\nThank you.`;
     
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -135,7 +135,6 @@ const sendCredentialsEmail = async (req, res) => {
           <p style="margin: 5px 0;"><strong>Password:</strong> ${password}</p>
         </div>
         <p><a href="${loginUrl}" style="background-color: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Login Here</a></p>
-        <p style="color: #EF4444; font-size: 12px;">Please keep this information secure and change your password after logging in.</p>
         <p style="color: #EF4444; font-size: 12px;">If you did not request this information, please contact your administrator immediately.</p>
         <p>Thank you.</p>
       </div>
