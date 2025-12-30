@@ -74,13 +74,25 @@ const login = async (req, res) => {
     });
 
     console.log(`Login successful for user: ${email} (ID: ${user.id})`);
+    console.log('Login - User object:', {
+      id: user.id,
+      email: user.email,
+      company_id: user.company_id,
+      company_name: user.company_name,
+      company_name_type: typeof user.company_name
+    });
+    
+    // Ensure company_name is always included, even if null or undefined
+    const companyName = user.company_name !== undefined ? user.company_name : null;
+    
     res.json({ 
       token, 
       user: { 
         id: user.id, 
         email: user.email,
-        role: user.role, 
-        company_id: user.company_id 
+        role: user.role,
+        company_id: user.company_id,
+        company_name: companyName
       } 
     });
   } catch (error) {
@@ -141,19 +153,53 @@ const register = async (req, res) => {
 
 const getMe = async (req, res) => {
   try {
+    console.log('getMe called for user ID:', req.user.id);
     const user = await User.findById(req.user.id);
+    
     if (!user) {
+      console.log('User not found for ID:', req.user.id);
       return res.status(404).json({ message: 'User not found' });
     }
-    res.json({
+    
+    console.log('getMe - Full user object from DB:', JSON.stringify(user, null, 2));
+    console.log('getMe - Raw user object keys:', Object.keys(user));
+    console.log('getMe - User data:', {
+      id: user.id,
+      email: user.email,
+      company_id: user.company_id,
+      company_name: user.company_name,
+      company_name_type: typeof user.company_name,
+      has_company_name: 'company_name' in user
+    });
+    
+    // Explicitly get company_name - handle null, undefined, or empty string
+    let companyName = null;
+    if (user.company_name !== undefined && user.company_name !== null && user.company_name !== '') {
+      companyName = user.company_name;
+    }
+    
+    // Build response object explicitly to ensure all fields are included
+    const responseData = {
       id: user.id,
       email: user.email,
       role: user.role,
       company_id: user.company_id,
-    });
+      company_name: companyName
+    };
+    
+    // Verify company_name is in the response object
+    console.log('getMe - Response data before sending:', JSON.stringify(responseData, null, 2));
+    console.log('getMe - Response has company_name:', 'company_name' in responseData);
+    console.log('getMe - Response company_name value:', responseData.company_name);
+    
+    res.json(responseData);
   } catch (error) {
-    console.error(error.message);
-    res.status(500).send('Server error');
+    console.error('getMe error:', error.message);
+    console.error('getMe error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: error.message 
+    });
   }
 };
 

@@ -9,8 +9,33 @@ const User = {
     return result.insertId;
   },
   findByEmail: async (email) => {
-    const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-    return rows[0];
+    const [rows] = await db.execute(
+      `SELECT
+         u.id,
+         u.email,
+         u.password,
+         u.role,
+         u.company_id,
+         c.name AS company_name
+       FROM users u
+       LEFT JOIN companies c ON u.company_id = c.id
+       WHERE u.email = ?`,
+      [email]
+    );
+    const user = rows[0];
+    if (user) {
+      console.log(`User.findByEmail(${email}) - Found user:`, {
+        id: user.id,
+        email: user.email,
+        company_id: user.company_id,
+        company_name: user.company_name,
+        company_name_type: typeof user.company_name,
+        company_name_value: user.company_name === null ? 'NULL' : user.company_name === undefined ? 'UNDEFINED' : user.company_name
+      });
+    } else {
+      console.log(`User.findByEmail(${email}) - User not found`);
+    }
+    return user;
   },
   findById: async (id) => {
     const [rows] = await db.execute(
@@ -25,7 +50,20 @@ const User = {
        WHERE u.id = ?`,
       [id]
     );
-    return rows[0];
+    const user = rows[0];
+    if (user) {
+      console.log(`User.findById(${id}) - Found user:`, {
+        id: user.id,
+        email: user.email,
+        company_id: user.company_id,
+        company_name: user.company_name,
+        company_name_type: typeof user.company_name,
+        company_name_value: user.company_name === null ? 'NULL' : user.company_name === undefined ? 'UNDEFINED' : user.company_name
+      });
+    } else {
+      console.log(`User.findById(${id}) - User not found`);
+    }
+    return user;
   },
   findAll: async () => {
     const [rows] = await db.execute(

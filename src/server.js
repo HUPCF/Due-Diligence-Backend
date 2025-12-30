@@ -14,10 +14,10 @@ process.on('uncaughtException', (err) => {
 });
 
 try {
-  const app = require('./app');
-  const PORT = process.env.PORT || 5000;
+const app = require('./app');
+const PORT = process.env.PORT || 5000;
 
-  app.listen(PORT, () => {
+app.listen(PORT, () => {
     console.log(`✅ Server is running on port ${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   }).on('error', (err) => {

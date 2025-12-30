@@ -21,28 +21,53 @@ function generateSecureUrl(fileNameOrUrl, expiry = 3600) {
   let encodedPathForUrl;
 
   try {
+    // If it's already a full URL, extract the pathname
     const parsedUrl = new URL(fileNameOrUrl);
-    decodedPathForSigning = decodeURI(parsedUrl.pathname);
+    decodedPathForSigning = decodeURIComponent(parsedUrl.pathname);
     encodedPathForUrl = parsedUrl.pathname;
   } catch (e) {
+    // If it's just a filename, construct the path with base path
     const basePath = process.env.BUNNY_BASE_PATH || '';
     const cleanBasePath = basePath.replace(/^\/+|\/+$/g, '');
-    decodedPathForSigning = `/${cleanBasePath}/${fileNameOrUrl}`;
-    encodedPathForUrl = `/${cleanBasePath}/${encodeURIComponent(fileNameOrUrl)}`;
+    
+    // Ensure the filename doesn't already include the base path
+    let cleanFileName = fileNameOrUrl;
+    if (cleanBasePath && fileNameOrUrl.startsWith(cleanBasePath + '/')) {
+      cleanFileName = fileNameOrUrl.replace(new RegExp(`^${cleanBasePath}/`), '');
+    }
+    
+    // Construct paths - Bunny.net expects the path to start with /
+    decodedPathForSigning = cleanBasePath ? `/${cleanBasePath}/${cleanFileName}` : `/${cleanFileName}`;
+    encodedPathForUrl = cleanBasePath ? `/${cleanBasePath}/${encodeURIComponent(cleanFileName)}` : `/${encodeURIComponent(cleanFileName)}`;
+  }
+
+  // Ensure path starts with / for Bunny.net
+  if (!decodedPathForSigning.startsWith('/')) {
+    decodedPathForSigning = '/' + decodedPathForSigning;
+  }
+  if (!encodedPathForUrl.startsWith('/')) {
+    encodedPathForUrl = '/' + encodedPathForUrl;
   }
 
   // The expires timestamp for the signature
   const expires = Math.floor(Date.now() / 1000) + expiry;
 
+  // Bunny.net token authentication: SecurityKey + Path + Expires
+  // Path must be URL-decoded for signing
   const stringToSign = securityKey + decodedPathForSigning + expires;
-  const hash = crypto.createHash('sha256').update(stringToSign).digest();
+  console.log(`String to sign: ${securityKey.substring(0, 4)}...${securityKey.substring(securityKey.length - 4)} + ${decodedPathForSigning} + ${expires}`);
+  
+  const hash = crypto.createHash('sha256').update(stringToSign, 'utf8').digest();
   
   let token = hash.toString('base64');
+  // Bunny.net uses URL-safe base64: replace + with -, / with _, and remove =
   token = token.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
   const finalUrl = `https://${pullZoneUrl}${encodedPathForUrl}?token=${token}&expires=${expires}`;
   
   console.log(`Path for signing: ${decodedPathForSigning}`);
+  console.log(`Encoded path for URL: ${encodedPathForUrl}`);
+  console.log(`Expires: ${expires} (${new Date(expires * 1000).toISOString()})`);
   console.log(`Final Secure URL: ${finalUrl}`);
 
   return finalUrl;
