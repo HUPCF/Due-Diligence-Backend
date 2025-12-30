@@ -3,8 +3,8 @@ const nodemailer = require('nodemailer');
 const sendEmail = async (to, subject, text, html = null) => {
   try {
     const smtpHost = process.env.SMTP_HOST || 'relay.enguard.com';
-    // Default to port 587 (TLS) - more reliable than 465 (SSL) which often times out
-    let smtpPort = parseInt(process.env.SMTP_PORT) || 587;
+    // Default to port 465 (SSL) for better security and no relay restrictions
+    let smtpPort = parseInt(process.env.SMTP_PORT) || 465;
     const smtpUser = process.env.SMTP_USERNAME || 'hupcfl@enguardsmtp.com';
     const smtpPass = process.env.SMTP_PASSWORD || 'ZHW!bqe2fhz.dce2chg';
     const smtpFromEmail = process.env.SMTP_FROM_EMAIL || 'noreply@hupcfl.com';
@@ -146,11 +146,11 @@ const sendEmail = async (to, subject, text, html = null) => {
     } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT' || error.code === 'ESOCKET') {
       errorMessage = `Cannot connect to SMTP server at ${currentSmtpHost}:${currentPort}. `;
       if (currentPort === 465) {
-        errorMessage += `Port 465 (SSL) connection timed out or failed. Port 465 is often blocked by firewalls or not supported.\n\nSOLUTION: Use port 587 (TLS) instead by setting SMTP_PORT=587 in your .env file. Port 587 is more reliable and widely supported.`;
+        errorMessage += `Port 465 (SSL) connection failed. This could mean:\n1. Port 465 is blocked by firewall\n2. The SMTP server doesn't support SSL on port 465\n3. Network connectivity issues\n\nSOLUTION: Try port 587 (TLS) instead by setting SMTP_PORT=587 in your .env file.`;
       } else if (currentPort === 587) {
-        errorMessage += `Port 587 (TLS) connection failed. Please check:\n1. Firewall allows outbound connections on port 587\n2. SMTP server is accessible\n3. Network connectivity\n4. SMTP credentials are correct`;
+        errorMessage += `Port 587 (TLS) connection failed. Please check:\n1. Firewall allows outbound connections on port 587\n2. SMTP server is accessible\n3. Network connectivity`;
       } else {
-        errorMessage += `Please check your SMTP host and port settings. Recommended: Use port 587 (TLS) for better reliability.`;
+        errorMessage += `Please check your SMTP host and port settings.`;
       }
     } else if (error.responseCode === 550 || error.message.includes('Relay is not allowed') || error.message.includes('relay')) {
       // Check if it's a recipient rejection (RCPT TO command)
